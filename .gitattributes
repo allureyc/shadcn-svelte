@@ -1,0 +1,23 @@
+# Normalize line endings to LF in the repo, regardless of OS.
+# Without this, Windows checkouts + locally-regenerated build artefacts show
+# up as thousands of phantom "CRLF" changes in `git status`.
+
+* text=auto eol=lf
+
+# Generated registry / build outputs are always LF.
+docs/static/registry/**/*.json text eol=lf
+docs/src/lib/registry/icons/**/*.ts text eol=lf
+
+# Lockfiles
+*.lock text eol=lf
+pnpm-lock.yaml text eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ico binary

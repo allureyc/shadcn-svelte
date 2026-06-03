@@ -21,10 +21,43 @@ export const TEMPLATE_SOURCES = [
 		group: "preview-02",
 		dir: path.resolve("src", "lib", "registry", "examples", "create", "preview-02", "cards"),
 	},
+	{
+		// Community / user-contributed cards. Drop `.svelte` files here and
+		// (re)run `build-gallery.ts` to see them appear next to the official
+		// preview cards. See `cards/README.md` for conventions.
+		group: "custom",
+		dir: path.resolve("src", "lib", "registry", "examples", "custom", "cards"),
+	},
 ] as const;
 
 /** Prefix used in every generated registry item's `name`. */
 export const ITEM_NAME_PREFIX = "tpl";
+
+/**
+ * Multi-file example pages (each is a folder under
+ * `src/routes/(app)/(layout)/examples/`). Every file inside the folder is
+ * shipped verbatim under the consumer's `src/routes/example-<name>/` tree,
+ * so a single `add` call installs a working page + its components + data.
+ */
+export const EXAMPLE_SOURCES = [
+	{
+		group: "example",
+		// Directory containing one subfolder per example (tasks, dashboard, …).
+		root: path.resolve("src", "routes", "(app)", "(layout)", "examples"),
+		// Categories applied to every produced item.
+		categories: ["example", "page"],
+	},
+] as const;
+
+/** Example folders to skip (e.g. broken / docs-only). */
+export const EXCLUDED_EXAMPLES: ReadonlySet<string> = new Set([
+	// Only ship `tasks` for now — the others reference docs-internal
+	// components (`$lib/components/spinner.svelte`, `metadata.svelte`)
+	// that won't resolve on the consumer side.
+	"authentication",
+	"dashboard",
+	"playground",
+]);
 
 /** Output base — must match official build output so we extend it. */
 export const REGISTRY_OUTPUT_BASE = path.resolve("static", "registry");
@@ -67,3 +100,16 @@ export const TAG_RULES: Array<{ test: RegExp; tag: string }> = [
 	{ test: /upload|file|cover/i, tag: "media" },
 	{ test: /team|invite|member|profile|social/i, tag: "collaboration" },
 ];
+
+/**
+ * Cards whose source depends on docs-only internals we can't auto-inline
+ * (e.g. design-system context, font registry). Skipped during build so the
+ * published registry never produces broken installs.
+ */
+export const EXCLUDED_SLUGS: ReadonlySet<string> = new Set([
+	"preview/typography-specimen",
+	"preview/style-overview",
+]);
+
+/** Import specifier of the docs-internal IconPlaceholder component. */
+export const ICON_PLACEHOLDER_IMPORT = "$lib/components/icon-placeholder/icon-placeholder.svelte";

@@ -42,6 +42,14 @@ export interface CardMeta {
 	dependencies?: string[];
 	devDependencies?: string[];
 	registryDependencies?: string[];
+	/**
+	 * Install target:
+	 * - `"page"` (default): a standalone SvelteKit route
+	 *   → `src/routes/<group>-<slug>/+page.svelte`
+	 * - `"block"`: a composable feature/composition under components
+	 *   → `$lib/components/blocks/<group>-<slug>/<slug>.svelte`
+	 */
+	kind?: "page" | "block";
 }
 
 export function metaPathFor(svelteFile: string): string {
@@ -107,22 +115,20 @@ export function parseDeps(source: string): ParsedDeps {
 // ---------------------------------------------------------------------------
 
 /**
- * Rewrites `$lib/registry/...` import specifiers to alias placeholders the CLI
- * can resolve. Mirrors what `shadcn-svelte registry build` does internally so
- * we get equivalent output without re-invoking the CLI on every file.
+ * Rewrites `$lib/registry/...` and `$lib/utils` import specifiers to the
+ * `$UI$ / $HOOKS$ / $LIB$ / $UTILS$` placeholder tokens. These placeholders
+ * are what shadcn-svelte CLI expects in registry item content — on `add`,
+ * it swaps them for the consumer's actual aliases from `components.json`
+ * (defaults: `$lib/components/ui`, `$lib/utils`, etc.).
+ *
+ * Mirrors the substitution shadcn-svelte CLI's own `registry build` performs.
  */
-export function rewriteImports(
-	source: string,
-	aliases: { ui: string; hooks: string; lib: string }
-): string {
-	return source.replace(
-		/(["'])\$lib\/registry\/(ui|hooks|lib)\//g,
-		(_full, quote: string, kind: string) => {
-			const replacement =
-				kind === "ui" ? aliases.ui : kind === "hooks" ? aliases.hooks : aliases.lib;
-			return `${quote}${replacement}/`;
-		}
-	);
+export function rewriteImports(source: string, _aliases?: unknown): string {
+	return source
+		.replace(/(["'])\$lib\/registry\/ui\//g, `$1$UI$/`)
+		.replace(/(["'])\$lib\/registry\/hooks\//g, `$1$HOOKS$/`)
+		.replace(/(["'])\$lib\/registry\/lib\//g, `$1$LIB$/`)
+		.replace(/(["'])\$lib\/utils(["'/])/g, `$1$UTILS$$2`);
 }
 
 // ---------------------------------------------------------------------------

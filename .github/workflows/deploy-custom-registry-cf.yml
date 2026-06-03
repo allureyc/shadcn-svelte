@@ -1,0 +1,92 @@
+# Deploy custom registry to Cloudflare Pages via wrangler.
+#
+# Builds the official registry + the extra-registry items and publishes the
+# resulting JSON tree to Cloudflare Pages. Independent from the upstream
+# `deploy-prod.yml` so syncing from shadcn-svelte/main never conflicts.
+#
+# One-time setup:
+#   1. Create a Cloudflare Pages project (Dashboard → Workers & Pages → Create
+#      → Pages → "Direct Upload"). Note the project name.
+#   2. Create an API token: Cloudflare Dashboard → My Profile → API Tokens →
+#      Create Token → "Edit Cloudflare Workers" template (gives Pages write).
+#   3. Find your Account ID on any Workers/Pages page (right sidebar).
+#   4. In GitHub repo Settings → Secrets and variables → Actions:
+#        Secrets:
+#          CF_API_TOKEN        = <token from step 2>
+#          CF_ACCOUNT_ID       = <account id from step 3>
+#        Variables:
+#          CF_PAGES_PROJECT    = <project name from step 1>
+#   5. (Optional) Add a custom domain in the CF Pages project UI.
+
+name: Deploy Custom Registry (Cloudflare Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/src/lib/registry/**
+      - docs/scripts/**
+      - packages/registry/**
+      - .github/workflows/deploy-custom-registry-cf.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-custom-registry-cf
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build official registry JSON
+        working-directory: docs
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm build:registry
+
+      - name: Build extra registry JSON
+        working-directory: docs
+        run: pnpm tsx scripts/extra-registry/build.ts
+
+      - name: Build preview gallery
+        working-directory: docs
+        run: pnpm tsx scripts/extra-registry/build-gallery.ts
+
+      # Stage what we want to publish. Mirror the official site layout
+      # (`/registry/styles/<style>/...`) so consumers can set
+      # `"registry": "https://your-domain/registry"` exactly as with shadcn-svelte.com.
+      - name: Stage public dir
+        shell: bash
+        run: |
+          mkdir -p public/registry public/gallery
+          cp -R docs/static/registry/. public/registry/
+          if [ -d docs/static/gallery ]; then
+            cp -R docs/static/gallery/. public/gallery/
+          fi
+          cat > public/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8" />
+          <title>Custom shadcn-svelte registry</title>
+          <h1>Custom shadcn-svelte registry</h1>
+          <p><a href="./gallery/">Interactive gallery</a> · <a href="./registry/styles/nova/index.json">registry index</a></p>
+          HTML
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          command: pages deploy public --project-name=${{ vars.CF_PAGES_PROJECT }} --branch=main

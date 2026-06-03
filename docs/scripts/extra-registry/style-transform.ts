@@ -23,7 +23,9 @@ export function loadStyleMap(cssPath: string): Record<string, string> {
 			if (!match) continue;
 			const className = match[1];
 			const applied: string[] = [];
-			rule.walkAtRules("apply", (a) => applied.push(a.params.trim()));
+			rule.walkAtRules("apply", (a) => {
+				applied.push(a.params.trim());
+			});
 			if (applied.length) map[className] = applied.join(" ");
 		}
 	});

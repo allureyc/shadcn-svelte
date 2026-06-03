@@ -1,0 +1,36 @@
+/*
+ * Reuse the docs `app.css` verbatim — it defines the full Tailwind v4 theme
+ * (custom variants, `--color-*` mappings, font imports, root + .dark
+ * palettes, every per-style CSS) which the cards' `cn-*` classes and
+ * ring/destructive utilities depend on. Importing the original means we
+ * never duplicate or drift from the design tokens, and upstream theme
+ * changes are picked up automatically.
+ */
+@import "../../../../src/app.css";
+
+/* Tell Tailwind v4 to also scan the gallery sources + the card sources for
+   utility usage. (Vite's automatic scanning only covers the gallery `root`.) */
+@source "../../../../src/lib/registry";
+@source "../../../../src/lib/registry/examples/create/preview/cards";
+@source "../../../../src/lib/registry/examples/create/preview-02/cards";
+@source "./**/*.{svelte,ts}";
+
+:root {
+	--preview-height: 28rem;
+}
+
+html,
+body,
+#app {
+	min-height: 100%;
+}
+
+body {
+	background: var(--background);
+	color: var(--foreground);
+	font-family:
+		"Geist Variable",
+		ui-sans-serif,
+		system-ui,
+		sans-serif;
+}
