@@ -1,0 +1,106 @@
+# Deploy custom registry to GitHub Pages.
+#
+# Builds the official registry + the extra-registry items + the preview gallery
+# SPA and publishes the resulting static tree to GitHub Pages. Independent from
+# the upstream `deploy-prod.yml` so syncing from shadcn-svelte/main never
+# conflicts.
+#
+# Consumers can install items via:
+#   npx shadcn-svelte@latest add https://<owner>.github.io/<repo>/registry/styles/nova/<name>.json
+#
+# Gallery URL:
+#   https://<owner>.github.io/<repo>/gallery/
+#
+# One-time setup:
+#   1. Repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
+#   2. (No secrets required — uses the built-in GITHUB_TOKEN.)
+#   3. Push to main, or trigger via "Run workflow".
+
+name: Deploy Custom Registry (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/src/lib/registry/**
+      - docs/src/routes/(app)/(layout)/examples/**
+      - docs/scripts/**
+      - packages/registry/**
+      - .github/workflows/deploy-custom-registry-ghpages.yml
+  workflow_dispatch:
+
+# Allow only one concurrent deployment, skipping runs queued between the run
+# in-progress and the latest queued. Do NOT cancel in-progress runs — we want
+# every deployment to complete.
+concurrency:
+  group: deploy-custom-registry-ghpages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build official registry JSON
+        working-directory: docs
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm build:registry
+
+      - name: Build extra registry JSON
+        working-directory: docs
+        run: pnpm tsx scripts/extra-registry/build.ts
+
+      - name: Build preview gallery
+        working-directory: docs
+        run: pnpm tsx scripts/extra-registry/build-gallery.ts
+
+      # Stage what we want to publish. Mirror the official site layout
+      # (`/registry/styles/<style>/...`) so consumers can set
+      # `"registry": "https://<owner>.github.io/<repo>/registry"` and use the
+      # CLI exactly as with shadcn-svelte.com.
+      - name: Stage public dir
+        shell: bash
+        run: |
+          mkdir -p public/registry public/gallery
+          cp -R docs/static/registry/. public/registry/
+          if [ -d docs/static/gallery ]; then
+            cp -R docs/static/gallery/. public/gallery/
+          fi
+          # Disable Jekyll so files/folders starting with `_` are served as-is.
+          touch public/.nojekyll
+          cat > public/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8" />
+          <title>Custom shadcn-svelte registry</title>
+          <h1>Custom shadcn-svelte registry</h1>
+          <p><a href="./gallery/">Interactive gallery</a> · <a href="./registry/styles/nova/index.json">registry index</a></p>
+          HTML
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
