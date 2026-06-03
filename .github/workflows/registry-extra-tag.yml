@@ -1,0 +1,84 @@
+# Extra registry workflows
+#
+# Auto-generates / refreshes meta.json sidecars for the create-preview template
+# cards and verifies the extra-registry build is green. Runs only when card
+# sources change so it never blocks unrelated PRs.
+#
+# Lives in its own workflow file — never touches official CI workflows so
+# upstream syncs from shadcn-svelte/main remain conflict-free.
+
+name: Extra Registry — Tag & Verify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/src/lib/registry/examples/create/preview/cards/**"
+      - "docs/src/lib/registry/examples/create/preview-02/cards/**"
+      - "docs/scripts/extra-registry/**"
+  pull_request:
+    paths:
+      - "docs/src/lib/registry/examples/create/preview/cards/**"
+      - "docs/src/lib/registry/examples/create/preview-02/cards/**"
+      - "docs/scripts/extra-registry/**"
+  workflow_dispatch:
+
+jobs:
+  tag-and-verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed for auto-commit on PR branches
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use a token that can push back to PR branches from same repo.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 1) Generate meta.json sidecars for any new cards lacking one.
+      - name: Generate template meta.json sidecars
+        working-directory: docs
+        run: pnpm tsx scripts/extra-registry/generate-meta.ts
+
+      # 2) Build the official registry first.
+      - name: Build official registry
+        working-directory: docs
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm build:registry
+
+      # 3) Inject the extra template items into the built output.
+      - name: Build extra registry
+        working-directory: docs
+        run: pnpm tsx scripts/extra-registry/build.ts
+
+      # 4) On push to main: auto-commit any new meta.json sidecars.
+      #    On PR: fail if there are uncommitted meta files (so contributors see them).
+      - name: Auto-commit generated meta (main only)
+        if: github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(registry): auto-tag template cards"
+          file_pattern: "docs/src/lib/registry/examples/create/preview*/cards/*.meta.json"
+
+      - name: Fail if uncommitted meta files in PR
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain 'docs/src/lib/registry/examples/create/preview*/cards/*.meta.json')" ]]; then
+            echo "::error::New template cards detected without committed meta.json. Run:"
+            echo "::error::  pnpm --filter docs exec tsx scripts/extra-registry/generate-meta.ts"
+            echo "::error::and commit the generated files."
+            git status --porcelain
+            exit 1
+          fi
